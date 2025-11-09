@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <body
+    style="
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+    "
+  >
+    <table role="presentation" style="width: 100%; border-collapse: collapse">
+      <tr>
+        <td align="center" style="padding: 40px 0">
+          <table
+            role="presentation"
+            style="
+              width: 600px;
+              border-collapse: collapse;
+              background-color: #ffffff;
+              border-radius: 8px;
+              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            "
+          >
+            <tr>
+              <td
+                style="
+                  padding: 40px 30px;
+                  text-align: center;
+                  background-color: #10b981;
+                  border-radius: 8px 8px 0 0;
+                "
+              >
+                <h1 style="margin: 0; color: #ffffff; font-size: 28px">
+                  Welcome Aboard! 🎉
+                </h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 40px 30px">
+                <p
+                  style="
+                    margin: 0 0 20px;
+                    color: #333333;
+                    font-size: 16px;
+                    line-height: 1.5;
+                  "
+                >
+                  Hi {{.Name}},
+                </p>
+                <p
+                  style="
+                    margin: 0 0 20px;
+                    color: #333333;
+                    font-size: 16px;
+                    line-height: 1.5;
+                  "
+                >
+                  Welcome to our platform! We're excited to have you on board.
+                </p>
+                <p
+                  style="
+                    margin: 0 0 20px;
+                    color: #333333;
+                    font-size: 16px;
+                    line-height: 1.5;
+                  "
+                >
+                  Your account has been successfully verified and you're all set
+                  to get started.
+                </p>
+                <p
+                  style="
+                    margin: 0;
+                    color: #333333;
+                    font-size: 16px;
+                    line-height: 1.5;
+                  "
+                >
+                  If you have any questions, feel free to reach out to our
+                  support team.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td
+                style="
+                  padding: 30px;
+                  text-align: center;
+                  background-color: #f8f9fa;
+                  border-radius: 0 0 8px 8px;
+                "
+              >
+                <p style="margin: 0; color: #999999; font-size: 12px">
+                  © {{.Year}} Your App. All rights reserved.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

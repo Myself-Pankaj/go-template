@@ -1,0 +1,13 @@
+# dbconfig.example.yml - Template for database config
+development:
+  dialect: postgres
+  datasource: host=localhost port=5432 user=postgres password=CHANGE_ME dbname=myapp_dev sslmode=disable
+  dir: migrations
+  table: schema_migrations
+
+production:
+  dialect: postgres
+  datasource: ${DATABASE_URL}
+  dir: migrations
+  table: schema_migrations
+# Note: Replace 'CHANGE_ME' with your actual database password in dbconfig.yml

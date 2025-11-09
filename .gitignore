@@ -1,0 +1,286 @@
+# =============================================================================
+# SECURITY - Sensitive Files (NEVER COMMIT THESE!)
+# =============================================================================
+
+# Environment variables with secrets
+.env
+.env.*
+.env.local
+.env.development
+.env.production
+.env.staging
+!.env.example
+
+# Database configuration with credentials
+dbconfig.yml
+database.yml
+
+# SSL/TLS certificates and keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+
+# API keys and secrets
+secrets.json
+credentials.json
+service-account*.json
+*-credentials.json
+
+# SSH keys
+id_rsa
+id_rsa.pub
+*.ppk
+
+# =============================================================================
+# BUILD ARTIFACTS
+# =============================================================================
+
+# Compiled binaries
+/bin/
+/dist/
+/build/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go build artifacts
+*.out
+*.test
+*.prof
+
+# Temporary build files
+/tmp/
+/temp/
+
+# Air live reload temporary files
+tmp/
+.air/
+
+# =============================================================================
+# GO SPECIFIC
+# =============================================================================
+
+# Dependency directories
+/vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+coverage.out
+coverage.html
+coverage.txt
+*.coverprofile
+
+# Go module cache
+go.sum.backup
+
+# =============================================================================
+# LOGS
+# =============================================================================
+
+# Application logs
+*.log
+logs/
+log/
+*.log.*
+
+# Debug logs
+debug.log
+error.log
+access.log
+app.log
+
+# Gin logs
+gin.log
+
+# =============================================================================
+# IDE & EDITOR FILES
+# =============================================================================
+
+# Visual Studio Code
+.vscode/
+.vscode/*
+!.vscode/settings.json.example
+!.vscode/extensions.json.example
+*.code-workspace
+
+# GoLand / IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+.idea_modules/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*.swn
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# =============================================================================
+# OPERATING SYSTEM FILES
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# =============================================================================
+# DATABASE FILES
+# =============================================================================
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# PostgreSQL
+*.dump
+*.sql.gz
+
+# Database backups
+backup/
+backups/
+*.backup
+
+# =============================================================================
+# DOCKER
+# =============================================================================
+
+# Docker override files
+docker-compose.override.yml
+.dockerignore
+
+# =============================================================================
+# TESTING & DEVELOPMENT
+# =============================================================================
+
+# Test data
+testdata/
+test-data/
+fixtures/
+
+# Mock files (if auto-generated)
+*_mock.go
+mocks/
+
+# Profiling data
+*.pprof
+*.prof
+
+# Benchmark results
+bench.txt
+benchmark.txt
+
+# =============================================================================
+# DOCUMENTATION
+# =============================================================================
+
+# Generated documentation (if you use godoc or similar)
+/docs/generated/
+
+# =============================================================================
+# CLOUD & DEPLOYMENT
+# =============================================================================
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Kubernetes
+*.kubeconfig
+
+# AWS
+.aws/
+
+# GCP
+.gcloud/
+
+# Azure
+.azure/
+
+# =============================================================================
+# CI/CD
+# =============================================================================
+
+# Local CI/CD configuration
+.gitlab-ci.local.yml
+
+# =============================================================================
+# MISC
+# =============================================================================
+
+# Node modules (if you have any frontend)
+node_modules/
+
+# NPM
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Air configuration (keep templates)
+!.air.*.toml.example
+
+# Local scripts
+local-*.sh
+run-local.sh
+
+# TODO files
+TODO.local
+NOTES.local
+
+# =============================================================================
+# PROJECT SPECIFIC (Uncomment if needed)
+# =============================================================================
+
+# Uploads directory with user content
+# /uploads/
+# /public/uploads/
+
+# Cache directories
+# /cache/
+# /.cache/
+
+# Static assets (if generated)
+# /static/dist/
+
+# Migration rollback files
+# /migrations/rollback/

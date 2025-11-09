@@ -1,0 +1,643 @@
+// internal/handler/auth_handler.go
+package handler
+
+import (
+	"errors"
+	"go-server/internal/middleware"
+	"go-server/internal/models"
+	"go-server/internal/repository"
+	"go-server/internal/service"
+	"go-server/pkg/logger"
+	"go-server/pkg/utils"
+	"go-server/pkg/validator"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+)
+
+type AuthHandler struct {
+	authService service.AuthService
+	jwtSecret   string
+	jwtIssuer   string
+	jwtExpiry   time.Duration
+}
+
+func NewAuthHandler(authService service.AuthService, jwtSecret, jwtIssuer string, jwtExpiry time.Duration) *AuthHandler {
+	return &AuthHandler{
+		authService: authService,
+		jwtSecret:   jwtSecret,
+		jwtIssuer:   jwtIssuer,
+		jwtExpiry:   jwtExpiry,
+	}
+}
+
+// Register godoc
+// @Summary Register a new user
+// @Description Create a new user account
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body models.RegisterRequest true "Register request"
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 409 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /auth/register [post]
+func (h *AuthHandler) Register(c *gin.Context) {
+	var req models.RegisterRequest	
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequestResponse(c, "Invalid request format. Please check your input")
+		return
+	}
+
+	// Validate request
+	if validationErrs := validator.ValidateStruct(&req); validationErrs != nil {
+		utils.ValidationErrorResponse(c, validationErrs.ToMap())
+		return
+	}
+
+	// Register user
+	user, err := h.authService.Register(c.Request.Context(), &req)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrUserAlreadyExists):
+			utils.ConflictResponse(c, "An account with this email already exists")
+			return
+		case errors.Is(err, repository.ErrPhoneAlreadyExists):
+			utils.ConflictResponse(c, "This phone number is already registered")
+			return
+		default:
+			logger.Error("Failed to register user",
+				zap.Error(err),
+				zap.String("email", req.Email),
+				zap.String("request_id", c.GetString("request_id")),
+			)
+			utils.InternalServerErrorResponse(c, err)
+			return
+		}
+	}
+
+	// Generate JWT token
+	token, err := middleware.GenerateToken(user.ID, user.Email, user.Role, h.jwtSecret, h.jwtIssuer, h.jwtExpiry)
+	if err != nil {
+		logger.Error("Failed to generate authentication token",
+			zap.Error(err),
+			zap.Int64("user_id", user.ID),
+			zap.String("request_id", c.GetString("request_id")),
+		)
+		utils.InternalServerErrorResponse(c, err)
+		return
+	}
+
+	logger.Info("User registered successfully",
+		zap.Int64("user_id", user.ID),
+		zap.String("email", user.Email),
+		zap.String("role", user.Role),
+	)
+
+	utils.CreatedResponse(c, "Account created successfully", gin.H{
+		"user":  user.ToResponse(),
+		"token": token,
+	}, "")
+}
+
+// Login godoc
+// @Summary Login user
+// @Description Authenticate user and return JWT token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body models.LoginRequest true "Login request"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /auth/login [post]
+func (h *AuthHandler) Login(c *gin.Context) {
+	var req models.LoginRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequestResponse(c, "Invalid request format. Please check your input")
+		return
+	}
+
+	// Validate request
+	if validationErrs := validator.ValidateStruct(&req); validationErrs != nil {
+		utils.ValidationErrorResponse(c, validationErrs.ToMap())
+		return
+	}
+
+	// Login user
+	user, err := h.authService.Login(c.Request.Context(), &req)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidCredentials) {
+			// Log failed login attempt for security monitoring
+			logger.Warn("Failed login attempt",
+				zap.String("email", req.Email),
+				zap.String("ip", c.ClientIP()),
+				zap.String("user_agent", c.Request.UserAgent()),
+			)
+			utils.UnauthorizedResponse(c, "Invalid email or password")
+			return
+		}
+		logger.Error("Login error",
+			zap.Error(err),
+			zap.String("email", req.Email),
+			zap.String("request_id", c.GetString("request_id")),
+		)
+		utils.InternalServerErrorResponse(c, err)
+		return
+	}
+
+	// Generate JWT token
+	token, err := middleware.GenerateToken(user.ID, user.Email, user.Role, h.jwtSecret, h.jwtIssuer, h.jwtExpiry)
+	if err != nil {
+		logger.Error("Failed to generate authentication token",
+			zap.Error(err),
+			zap.Int64("user_id", user.ID),
+			zap.String("request_id", c.GetString("request_id")),
+		)
+		utils.InternalServerErrorResponse(c, err)
+		return
+	}
+
+	logger.Info("User logged in successfully",
+		zap.Int64("user_id", user.ID),
+		zap.String("email", user.Email),
+		zap.String("ip", c.ClientIP()),
+	)
+
+	utils.SuccessResponse(c, http.StatusOK, "Login successful", gin.H{
+		"user":  user.ToResponse(),
+		"token": token,
+	})
+}
+
+// GetProfile godoc
+// @Summary Get user profile
+// @Description Get authenticated user's profile
+// @Tags auth
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /auth/profile [get]
+func (h *AuthHandler) GetProfile(c *gin.Context) {
+	userID, exists := middleware.GetUserIDFromContext(c)
+	if !exists {
+		utils.UnauthorizedResponse(c, "Authentication required")
+		return
+	}
+
+	user, err := h.authService.GetUserByID(c.Request.Context(), userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			utils.NotFoundResponse(c, "User profile")
+			return
+		}
+		logger.Error("Failed to retrieve user profile",
+			zap.Error(err),
+			zap.Int64("user_id", userID),
+			zap.String("request_id", c.GetString("request_id")),
+		)
+		utils.InternalServerErrorResponse(c, err)
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "Profile retrieved successfully", user.ToResponse())
+}
+
+// UpdateProfile godoc
+// @Summary Update user profile
+// @Description Update authenticated user's profile
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body models.UpdateUserRequest true "Update request"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 409 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /auth/profile [put]
+func (h *AuthHandler) UpdateProfile(c *gin.Context) {
+	userID, exists := middleware.GetUserIDFromContext(c)
+	if !exists {
+		utils.UnauthorizedResponse(c, "Authentication required")
+		return
+	}
+
+	var req models.UpdateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequestResponse(c, "Invalid request format. Please check your input")
+		return
+	}
+
+	// Validate request
+	if validationErrs := validator.ValidateStruct(&req); validationErrs != nil {
+		utils.ValidationErrorResponse(c, validationErrs.ToMap())
+		return
+	}
+
+	user, err := h.authService.UpdateUser(c.Request.Context(), userID, &req)
+	if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrUserNotFound):
+			utils.NotFoundResponse(c, "User profile")
+			return
+		case errors.Is(err, repository.ErrPhoneAlreadyExists):
+			utils.ConflictResponse(c, "This phone number is already in use by another account")
+			return
+		default:
+			logger.Error("Failed to update user profile",
+				zap.Error(err),
+				zap.Int64("user_id", userID),
+				zap.String("request_id", c.GetString("request_id")),
+			)
+			utils.InternalServerErrorResponse(c, err)
+			return
+		}
+	}
+
+	logger.Info("User profile updated successfully",
+		zap.Int64("user_id", userID),
+		zap.String("email", user.Email),
+	)
+	utils.SuccessResponse(c, http.StatusOK, "Profile updated successfully", user.ToResponse())
+}
+
+// ChangePassword godoc
+// @Summary Change user password
+// @Description Change authenticated user's password
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body models.ChangePasswordRequest true "Change password request"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /auth/change-password [post]
+func (h *AuthHandler) ChangePassword(c *gin.Context) {
+	userID, exists := middleware.GetUserIDFromContext(c)
+	if !exists {
+		utils.UnauthorizedResponse(c, "Authentication required")
+		return
+	}
+
+	var req models.ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequestResponse(c, "Invalid request format. Please check your input")
+		return
+	}
+
+	// Validate request
+	if validationErrs := validator.ValidateStruct(&req); validationErrs != nil {
+		utils.ValidationErrorResponse(c, validationErrs.ToMap())
+		return
+	}
+
+	err := h.authService.ChangePassword(c.Request.Context(), userID, &req)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidCredentials) {
+			// Log for security monitoring
+			logger.Warn("Failed password change attempt - incorrect current password",
+				zap.Int64("user_id", userID),
+				zap.String("ip", c.ClientIP()),
+			)
+			utils.UnauthorizedResponse(c, "Current password is incorrect")
+			return
+		}
+		logger.Error("Failed to change password",
+			zap.Error(err),
+			zap.Int64("user_id", userID),
+			zap.String("request_id", c.GetString("request_id")),
+		)
+		utils.InternalServerErrorResponse(c, err)
+		return
+	}
+
+	logger.Info("Password changed successfully",
+		zap.Int64("user_id", userID),
+		zap.String("ip", c.ClientIP()),
+	)
+	utils.SuccessResponse(c, http.StatusOK, "Password changed successfully. Please login with your new password", nil)
+}
+
+// DeleteAccount godoc
+// @Summary Delete user account
+// @Description Delete authenticated user's account (soft delete)
+// @Tags auth
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /auth/account [delete]
+func (h *AuthHandler) DeleteAccount(c *gin.Context) {
+	userID, exists := middleware.GetUserIDFromContext(c)
+	if !exists {
+		utils.UnauthorizedResponse(c, "Authentication required")
+		return
+	}
+
+	// Get user email for logging before deletion
+	userEmail, _ := middleware.GetUserEmailFromContext(c)
+
+	err := h.authService.DeleteUser(c.Request.Context(), userID)
+	if err != nil {
+		logger.Error("Failed to delete user account",
+			zap.Error(err),
+			zap.Int64("user_id", userID),
+			zap.String("request_id", c.GetString("request_id")),
+		)
+		utils.InternalServerErrorResponse(c, err)
+		return
+	}
+
+	logger.Info("User account deleted",
+		zap.Int64("user_id", userID),
+		zap.String("email", userEmail),
+		zap.String("ip", c.ClientIP()),
+	)
+	utils.SuccessResponse(c, http.StatusOK, "Account deleted successfully. We're sorry to see you go", nil)
+}
+
+// Logout godoc
+// @Summary Logout user
+// @Description Logout user (client-side token removal)
+// @Tags auth
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} map[string]interface{}
+// @Router /auth/logout [post]
+func (h *AuthHandler) Logout(c *gin.Context) {
+	// Get user info for logging
+	userID, _ := middleware.GetUserIDFromContext(c)
+	userEmail, _ := middleware.GetUserEmailFromContext(c)
+
+	// Log logout event
+	if userID > 0 {
+		logger.Info("User logged out",
+			zap.Int64("user_id", userID),
+			zap.String("email", userEmail),
+			zap.String("ip", c.ClientIP()),
+		)
+	}
+
+	// JWT logout is handled client-side by removing the token
+	// This endpoint exists for API consistency and audit logging
+	utils.SuccessResponse(c, http.StatusOK, "Logged out successfully", nil)
+}
+
+// RefreshToken godoc
+// @Summary Refresh authentication token
+// @Description Generate a new JWT token for authenticated user
+// @Tags auth
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /auth/refresh [post]
+func (h *AuthHandler) RefreshToken(c *gin.Context) {
+	userID, exists := middleware.GetUserIDFromContext(c)
+	if !exists {
+		utils.UnauthorizedResponse(c, "Authentication required")
+		return
+	}
+
+	// Get current user info from context
+	userEmail, _ := middleware.GetUserEmailFromContext(c)
+	userRole, _ := middleware.GetUserRoleFromContext(c)
+
+	// Verify user still exists and is active
+	user, err := h.authService.GetUserByID(c.Request.Context(), userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			utils.UnauthorizedResponse(c, "User account not found")
+			return
+		}
+		logger.Error("Failed to verify user for token refresh",
+			zap.Error(err),
+			zap.Int64("user_id", userID),
+		)
+		utils.InternalServerErrorResponse(c, err)
+		return
+	}
+
+	// Generate new JWT token
+	token, err := middleware.GenerateToken(user.ID, userEmail, userRole, h.jwtSecret, h.jwtIssuer, h.jwtExpiry)
+	if err != nil {
+		logger.Error("Failed to generate refresh token",
+			zap.Error(err),
+			zap.Int64("user_id", userID),
+		)
+		utils.InternalServerErrorResponse(c, err)
+		return
+	}
+
+	logger.Info("Token refreshed successfully", zap.Int64("user_id", userID))
+
+	utils.SuccessResponse(c, http.StatusOK, "Token refreshed successfully", gin.H{
+		"token": token,
+	})
+}
+
+
+
+////services
+// internal/service/auth_service.go
+package service
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"go-server/internal/models"
+	"go-server/internal/repository"
+	"time"
+
+	"golang.org/x/crypto/bcrypt"
+)
+
+var (
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrUserAlreadyExists  = errors.New("user already exists")
+)
+
+type AuthService interface {
+	Register(ctx context.Context, req *models.RegisterRequest) (*models.User, error)
+	Login(ctx context.Context, req *models.LoginRequest) (*models.User, error)
+	GetUserByID(ctx context.Context, userID int64) (*models.User, error)
+	UpdateUser(ctx context.Context, userID int64, req *models.UpdateUserRequest) (*models.User, error)
+	ChangePassword(ctx context.Context, userID int64, req *models.ChangePasswordRequest) error
+	DeleteUser(ctx context.Context, userID int64) error
+	
+}
+
+type authService struct {
+	userRepo repository.UserRepository
+}
+
+func NewAuthService(userRepo repository.UserRepository) AuthService {
+	return &authService{
+		userRepo: userRepo,
+	}
+}
+
+func (s *authService) Register(ctx context.Context, req *models.RegisterRequest) (*models.User, error) {
+	// Check if email already exists
+	exists, err := s.userRepo.EmailExists(ctx, req.Email)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, ErrUserAlreadyExists
+	}
+
+	// Check if phone number already exists (if provided)
+	if req.PhoneNumber != nil && *req.PhoneNumber != "" {
+		exists, err := s.userRepo.PhoneExists(ctx, *req.PhoneNumber)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, repository.ErrPhoneAlreadyExists
+		}
+	}
+
+	// Hash password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create user
+	user := &models.User{
+		Name:         req.Name,
+		Email:        req.Email,
+		PhoneNumber:  req.PhoneNumber,
+		PasswordHash: string(hashedPassword),
+		Role:         "owner",
+		Subscribed:   false,
+		PlanType:     "free",
+		IsVerified:   false,
+	}
+
+	if err := s.userRepo.Create(ctx, user); err != nil {
+		return nil, err
+	}
+
+	// Generate verification token (32 bytes = 64 hex characters)
+	// token, err := generateSecureToken(32)
+	// if err != nil {
+	// 	return nil, "", err
+	// }
+
+	// Save verification token (expires in 2 minutes)
+	// verification := &models.EmailVerification{
+	// 	UserID:    user.ID,
+	// 	Token:     token,
+	// 	ExpiresAt: time.Now().Add(2 * time.Minute),
+	// 	IsUsed:    false,
+	// }
+	return user,token, nil
+}
+func generateSecureToken(length int) (string, error) {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+// Helper: Hash password (implement with bcrypt)
+func hashPassword(password string) (string, error) {
+	// Use bcrypt.GenerateFromPassword
+	// Implementation depends on your existing code
+	return "", nil // placeholder
+}
+func (s *authService) Login(ctx context.Context, req *models.LoginRequest) (*models.User, error) {
+	// Get user by email
+	user, err := s.userRepo.GetByEmail(ctx, req.Email)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return nil, ErrInvalidCredentials
+		}
+		return nil, err
+	}
+
+	// Verify password
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		return nil, ErrInvalidCredentials
+	}
+
+	// Update last login
+	_ = s.userRepo.UpdateLastLogin(ctx, user.ID)
+
+	return user, nil
+}
+
+func (s *authService) GetUserByID(ctx context.Context, userID int64) (*models.User, error) {
+	return s.userRepo.GetByID(ctx, userID)
+}
+
+func (s *authService) UpdateUser(ctx context.Context, userID int64, req *models.UpdateUserRequest) (*models.User, error) {
+	// Get current user
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update fields if provided
+	if req.Name != nil {
+		user.Name = *req.Name
+	}
+	if req.PhoneNumber != nil {
+		user.PhoneNumber = req.PhoneNumber
+	}
+
+	user.UpdatedAt = time.Now()
+
+	// Save changes
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (s *authService) ChangePassword(ctx context.Context, userID int64, req *models.ChangePasswordRequest) error {
+	// Get user
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	// Verify old password
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.OldPassword)); err != nil {
+		return ErrInvalidCredentials
+	}
+
+	// Hash new password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	// Update password
+	return s.userRepo.UpdatePassword(ctx, userID, string(hashedPassword))
+}
+
+func (s *authService) DeleteUser(ctx context.Context, userID int64) error {
+	return s.userRepo.Delete(ctx, userID)
+}
