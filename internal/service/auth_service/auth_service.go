@@ -21,6 +21,7 @@ type AuthService interface {
 	Update(ctx context.Context, req *models.UpdateUserRequest) (*models.User, error)
 	UpdateLastLogin(ctx context.Context, userID int64) error
 	ChangePassword(ctx context.Context, userID int64, req *models.ChangePasswordRequest) error
+
 }
 
 type authService struct {
@@ -136,6 +137,7 @@ func (s *authService) ChangePassword(ctx context.Context, userID int64, req *mod
 
 	return nil
 }
+
 
 // ==================== HELPER METHODS ====================
 

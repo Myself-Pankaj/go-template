@@ -115,7 +115,7 @@ func validateOTPCode(fl validator.FieldLevel) bool {
 // validateUserRole validates user role against allowed values
 func validateUserRole(fl validator.FieldLevel) bool {
 	role := fl.Field().String()
-	allowedRoles := []string{"user", "admin", "moderator"}
+	allowedRoles := []string{"user", "admin", "owner","staff"}
 
 	for _, allowedRole := range allowedRoles {
 		if role == allowedRole {

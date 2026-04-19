@@ -2,24 +2,25 @@ package authservice
 
 import (
 	"context"
+	"net/http"
+	"strings"
+	"time"
+
 	"go-server/internal/models"
 	"go-server/internal/repository"
 	"go-server/internal/service"
 	"go-server/pkg/utils"
-	"time"
-
-	// "go-server/pkg/validator"
-	"strings"
 )
 
 type RegistrationService interface {
 	Register(ctx context.Context, req *models.RegisterRequest) (*models.User, error)
+	ForgetPassword(ctx context.Context, req *models.ForgotPasswordRequest) error
 }
 
 type registrationService struct {
 	userRepo         repository.UserRepository
 	verificationRepo repository.VerificationRepository
-	emailService     EmailService
+	emailService     EmailService // defined in interfaces.go
 	txManager        repository.TransactionManager
 }
 
@@ -41,7 +42,6 @@ func (s *registrationService) Register(ctx context.Context, req *models.Register
 	ctx, cancel := context.WithTimeout(ctx, service.DefaultTimeout)
 	defer cancel()
 
-	// --- Sanitize ---
 	req.Name = strings.TrimSpace(req.Name)
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 
@@ -70,7 +70,7 @@ func (s *registrationService) Register(ctx context.Context, req *models.Register
 			Email:        req.Email,
 			PhoneNumber:  req.PhoneNumber,
 			PasswordHash: hashedPassword,
-			Role:         "owner",
+			Role:         req.Role,
 			IsVerified:   false,
 		}
 
@@ -99,4 +99,38 @@ func (s *registrationService) Register(ctx context.Context, req *models.Register
 	}
 
 	return user, nil
+}
+
+func (s *registrationService) ForgetPassword(ctx context.Context, req *models.ForgotPasswordRequest) error {
+	ctx, cancel := context.WithTimeout(ctx, service.DefaultTimeout)
+	defer cancel()
+
+	user, err := s.userRepo.GetByEmail(ctx, req.Email)
+	if err != nil {
+		return models.NewAppError(models.ErrCodeNotFound, "Unable to find user with provided email", http.StatusNotFound, err)
+	}
+	if user == nil {
+		return models.NewAppError(models.ErrCodeNotFound, "Unable to find user with provided email", http.StatusNotFound, nil)
+	}
+
+	otp, err := utils.GenerateOTP()
+	if err != nil {
+		return models.NewAppError(models.ErrCodeInternalServer, "Failed to generate OTP", http.StatusInternalServerError, err)
+	}
+
+	verification := &models.UserVerification{
+		UserID:    user.ID,
+		OTP:       otp,
+		ExpiresAt: time.Now().UTC().Add(service.OTPExpiryDuration),
+		IsUsed:    false,
+	}
+	if err := s.verificationRepo.CreateVerification(ctx, verification); err != nil {
+		return models.NewAppError(models.ErrCodeDatabaseError, "Failed to create verification token", http.StatusInternalServerError, err)
+	}
+
+	if err := s.emailService.SendForgetPasswordEmail(ctx, user.Email, otp, user.Name); err != nil {
+		return models.NewAppError(models.ErrCodeInternalServer, "Failed to send password reset email", http.StatusInternalServerError, err)
+	}
+
+	return nil
 }

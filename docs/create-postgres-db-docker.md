@@ -60,11 +60,9 @@ In pgAdmin:
 
 1. Right-click **Servers → Register → Server**
 2. In the **General** tab:
-
    - Name: `Postgres DB`
 
 3. In the **Connection** tab:
-
    - Host name/address: `postgres-db`
    - Port: `5432`
    - Username: `testing_user`
@@ -83,3 +81,15 @@ Servers → Postgres DB → Databases → hotel_db
 ```
 
 You’re ready to go 🎉
+
+## Connecting via psql CLI
+
+docker exec -it postgres-db psql -U testing_user -d postgres
+
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE datname = 'main_db'
+AND pid <> pg_backend_pid();
+
+DROP DATABASE IF EXISTS main_db;
+CREATE DATABASE main_db;

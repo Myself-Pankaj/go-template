@@ -3,29 +3,15 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"go-server/internal/models"
 	"go-server/pkg/database"
-	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 )
 
 // Repository-level sentinel errors
-var (
-	ErrNotFound = models.NewAppError(
-		models.ErrCodeNotFound,
-		"record not found",
-		http.StatusNotFound,
-		nil,
-	)
-	ErrOTPExpired = models.NewAppError(
-		models.ErrCodeOTPExpired,
-		"otp expired",
-		http.StatusBadRequest,
-		nil,
-	)
-)
 
 type VerificationRepository interface {
 	CreateVerification(ctx context.Context, verification *models.UserVerification) error
@@ -50,7 +36,7 @@ func (r *verificationRepository) CreateVerification(ctx context.Context, verific
 	// Delete any unused verifications for this user
 	deleteQuery := `DELETE FROM user_verifications WHERE user_id = $1 AND is_used = FALSE`
 	if _, err := executor.Exec(ctx, deleteQuery, verification.UserID); err != nil {
-		return models.NewAppError(models.ErrCodeDatabaseError, "failed to delete old OTP records", http.StatusInternalServerError, err)
+		return  fmt.Errorf("delete old verifications: %w", err)
 	}
 
 	// Insert new verification record
@@ -62,7 +48,7 @@ func (r *verificationRepository) CreateVerification(ctx context.Context, verific
 	err := executor.QueryRow(ctx, query, verification.UserID, verification.OTP, verification.ExpiresAt).
 		Scan(&verification.ID, &verification.CreatedAt)
 	if err != nil {
-		return models.NewAppError(models.ErrCodeDatabaseError, "failed to create verification record", http.StatusInternalServerError, err)
+		return  fmt.Errorf("insert verification: %w", err)
 	}
 
 	return nil
@@ -94,14 +80,14 @@ func (r *verificationRepository) GetActiveVerification(ctx context.Context, user
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, models.NewAppError(models.ErrCodeNotFound, "no active verification found", http.StatusNotFound, err)
+			return nil, errors.New("verification not found")
 		}
-		return nil, models.NewAppError(models.ErrCodeDatabaseError, "failed to query verification record", http.StatusInternalServerError, err)
+		return nil, fmt.Errorf("select verification: %w", err)
 	}
 
 	// Double-check expiry (extra safety)
 	if time.Now().After(verification.ExpiresAt) {
-		return nil, models.NewAppError(models.ErrCodeOTPExpired, "OTP has expired", http.StatusBadRequest, ErrOTPExpired)
+		return nil,  fmt.Errorf("delete expired unverified users: %w", err)
 	}
 
 	return &verification, nil
@@ -113,11 +99,11 @@ func (r *verificationRepository) MarkAsUsed(ctx context.Context, verificationID 
 	executor := GetExecutor(ctx, r.db)
 	cmdTag, err := executor.Exec(ctx, query, verificationID)
 	if err != nil {
-		return models.NewAppError(models.ErrCodeDatabaseError, "failed to mark verification as used", http.StatusInternalServerError, err)
+		return fmt.Errorf("update verification as used: %w", err)
 	}
 
 	if cmdTag.RowsAffected() == 0 {
-		return models.NewAppError(models.ErrCodeNotFound, "verification not found to mark as used", http.StatusNotFound, ErrNotFound)
+		return  errors.New("verification not found")
 	}
 
 	return nil
@@ -128,7 +114,7 @@ func (r *verificationRepository) DeleteExpiredVerifications(ctx context.Context)
 	query := `DELETE FROM user_verifications WHERE expires_at < NOW()`
 	executor := GetExecutor(ctx, r.db)
 	if _, err := executor.Exec(ctx, query); err != nil {
-		return models.NewAppError(models.ErrCodeDatabaseError, "failed to delete expired verifications", http.StatusInternalServerError, err)
+		return  fmt.Errorf("delete expired verifications: %w", err)
 	}
 	return nil
 }
@@ -138,7 +124,7 @@ func (r *verificationRepository) DeleteUserVerifications(ctx context.Context, us
 	query := `DELETE FROM user_verifications WHERE user_id = $1`
 	executor := GetExecutor(ctx, r.db)
 	if _, err := executor.Exec(ctx, query, userID); err != nil {
-		return models.NewAppError(models.ErrCodeDatabaseError, "failed to delete user verifications", http.StatusInternalServerError, err)
+		return  fmt.Errorf("delete user verifications: %w", err)
 	}
 	return nil
 }

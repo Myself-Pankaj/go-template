@@ -123,7 +123,7 @@ func LogStartupInfo(cfg *config.Config) {
 		zap.Duration("read_timeout", cfg.ReadTimeout),
 		zap.Duration("write_timeout", cfg.WriteTimeout),
 		zap.Duration("idle_timeout", cfg.IdleTimeout),
-		zap.Duration("jwt_expiry", cfg.JWTExpiry),
+		zap.Duration("jwt_expiry", cfg.JWTRefreshTokenExpiry),
 		zap.String("jwt_issuer", cfg.JWTIssuer),
 	)
 	logger.Info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

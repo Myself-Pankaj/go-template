@@ -59,4 +59,9 @@ const (
 
 	ErrCodeRateLimited   = "RATE_LIMITED"
 	ErrMissingIdentifier = "MISSING_IDENTIFIER"
+
+	ErrCodeLimitExceeded = "SUBSCRIBE_TO_PREMIUM"
+
+	// Subscription / plan errors
+	ErrCodeSubscriptionRequired = "SUBSCRIPTION_REQUIRED"
 )

@@ -10,11 +10,19 @@ import (
 
 // RegisterRequest represents user registration input
 type RegisterRequest struct {
-	Name        string  `json:"name" validate:"required,min=2,max=100,alphanumeric_space"`
-	Email       string  `json:"email" validate:"required,email,max=255"`
-	PhoneNumber string  `json:"phone_number" validate:"required,min=10,phone_intl"`
-	Password    string  `json:"password" validate:"required,strong_password,min=8,max=128"`
-	Role        string  `json:"role,omitempty" validate:"omitempty,user_role"`
+	Name        string `json:"name" validate:"required,min=2,max=100,alphanumeric_space"`
+	Email       string `json:"email" validate:"required,email,max=255"`
+	PhoneNumber string `json:"phone_number" validate:"required,min=10,phone_intl"`
+	Password    string `json:"password" validate:"required,strong_password,min=8,max=128"`
+	Role        string `json:"role,omitempty" validate:"omitempty,user_role"`
+}
+
+// Sanitize cleans and normalizes registration data
+func (r *RegisterRequest) Sanitize() {
+	r.Name = strings.TrimSpace(r.Name)
+	r.Email = strings.TrimSpace(strings.ToLower(r.Email))
+	r.PhoneNumber = strings.TrimSpace(r.PhoneNumber)
+	r.Role = strings.TrimSpace(strings.ToLower(r.Role))
 }
 
 
@@ -24,7 +32,7 @@ type RegisterRequest struct {
 // LoginRequest represents user login input
 type LoginRequest struct {
 	Email       *string `json:"email,omitempty" validate:"omitempty,email,max=255"`
-	PhoneNumber *string `json:"phone_number,omitempty" validate:"omitempty,phone"`
+	PhoneNumber *string `json:"phone_number,omitempty" validate:"omitempty,phone_intl"`
 	Password    string  `json:"password" validate:"required,min=8,max=128"`
 }
 
@@ -80,7 +88,7 @@ func (r *ResendOTPRequest) Sanitize() {
 type UpdateUserRequest struct {
 	ID          int64   `json:"-"` // Set from context, not from request body
 	Name        *string `json:"name,omitempty" validate:"omitempty,min=2,max=100,alphanumeric_space"`
-	PhoneNumber *string `json:"phone_number,omitempty" validate:"omitempty,phone"`
+	PhoneNumber *string `json:"phone_number,omitempty" validate:"omitempty,phone_intl"`
 }
 
 // Sanitize cleans and normalizes update data

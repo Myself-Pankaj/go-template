@@ -21,6 +21,7 @@ type EmailService interface {
 	SendOTP(ctx context.Context, to, otp, name string) error
 	SendWelcomeEmail(ctx context.Context, to, name string) error
 	SendPasswordResetEmail(ctx context.Context, to, resetLink, name string) error
+	SendForgetPasswordEmail(ctx context.Context, to, otp, name string) error
 	Close() error
 }
 
@@ -40,9 +41,10 @@ type emailConfig struct {
 }
 
 type emailTemplates struct {
-	otp           *template.Template
-	welcome       *template.Template
-	passwordReset *template.Template
+	otp             *template.Template
+	welcome         *template.Template
+	passwordReset   *template.Template
+	forgetPassword  *template.Template // was missing
 }
 
 type smtpPool struct {
@@ -57,7 +59,7 @@ type smtpPool struct {
 }
 
 type smtpConnection struct {
-	client    *smtp.Client
+	client *smtp.Client
 }
 
 // NewEmailService creates a new email service instance
@@ -141,6 +143,26 @@ func (s *emailService) SendOTP(ctx context.Context, to, otp, name string) error 
 	return s.sendEmail(ctx, to, "Your Verification Code", body)
 }
 
+// SendForgetPasswordEmail sends a forget-password OTP email
+func (s *emailService) SendForgetPasswordEmail(ctx context.Context, to, otp, name string) error {
+	data := struct {
+		Name string
+		OTP  string
+		Year int
+	}{
+		Name: name,
+		OTP:  otp,
+		Year: time.Now().Year(),
+	}
+
+	body, err := s.renderTemplate(s.templates.forgetPassword, data) // fixed field name
+	if err != nil {
+		return fmt.Errorf("failed to render forget password template: %w", err)
+	}
+
+	return s.sendEmail(ctx, to, "Reset Your Password", body)
+}
+
 // SendWelcomeEmail sends a welcome email after successful verification
 func (s *emailService) SendWelcomeEmail(ctx context.Context, to, name string) error {
 	data := struct {
@@ -159,7 +181,7 @@ func (s *emailService) SendWelcomeEmail(ctx context.Context, to, name string) er
 	return s.sendEmail(ctx, to, "Welcome to Our Platform!", body)
 }
 
-// SendPasswordResetEmail sends a password reset email
+// SendPasswordResetEmail sends a password reset link email
 func (s *emailService) SendPasswordResetEmail(ctx context.Context, to, resetLink, name string) error {
 	data := struct {
 		Name      string
@@ -277,10 +299,16 @@ func loadTemplates() (*emailTemplates, error) {
 		return nil, fmt.Errorf("failed to parse password reset template: %w", err)
 	}
 
+	forgetPassword, err := template.ParseFS(templateFS, "templates/forget_password_email.html") // was missing
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse forget password template: %w", err)
+	}
+
 	return &emailTemplates{
-		otp:           otp,
-		welcome:       welcome,
-		passwordReset: reset,
+		otp:            otp,
+		welcome:        welcome,
+		passwordReset:  reset,
+		forgetPassword: forgetPassword,
 	}, nil
 }
 

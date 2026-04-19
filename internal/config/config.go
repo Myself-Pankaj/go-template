@@ -71,9 +71,9 @@ type Config struct {
 	RedisDB       int
 
 	// JWT
-	JWTSecret          string
-	JWTExpiry          time.Duration
-	JWTRefreshExpiry   time.Duration
+	JWTSecret  string
+	JWTAccessTokenExpiry  time.Duration
+	JWTRefreshTokenExpiry time.Duration
 	JWTIssuer          string
 
 	// Email
@@ -192,8 +192,11 @@ func loadConfigInternal() (*Config, error) {
 
 		// JWT
 		JWTSecret:        getEnv("JWT_SECRET", ""),
-		JWTExpiry:        time.Duration(getEnvAsInt("JWT_EXPIRY", 3600)) * time.Hour,
-		JWTRefreshExpiry: time.Duration(getEnvAsInt("JWT_REFRESH_EXPIRY", 86400)) * time.Hour,
+		// JWTSecret:        getEnv("JWT_SECRET", ""),
+		// JWTExpiry:        time.Duration(getEnvAsInt("JWT_EXPIRY", 3600)) * time.Hour,
+		// JWTRefreshExpiry: time.Duration(getEnvAsInt("JWT_REFRESH_EXPIRY", 86400)) * time.Hour,
+		JWTAccessTokenExpiry:  time.Duration(getEnvAsInt("JWT_ACCESS_TOKEN_EXPIRY", 15*60)) * time.Second,//Expire in seconds
+		JWTRefreshTokenExpiry: time.Duration(getEnvAsInt("JWT_REFRESH_TOKEN_EXPIRY", 24*60*60*7)) * time.Second,//Expire in seconds
 		JWTIssuer:        getEnv("JWT_ISSUER", "go-server"),
 
 		//Email
@@ -235,7 +238,7 @@ func (c *Config) Validate() error {
 		if c.DBPassword == "" {
 			return fmt.Errorf("DB_PASSWORD is required in production")
 		}
-		if c.JWTSecret == "" {
+		if c.JWTSecret == ""{
 			return fmt.Errorf("JWT_SECRET is required in production")
 		}
 		if c.EnableHTTPS && (c.TLSCertFile == "" || c.TLSKeyFile == "") {
